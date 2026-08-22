@@ -1,0 +1,39 @@
+# ── 환경 ────────────────────────────────
+.venv/
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ── upstream (별도 저장소, 수정하지 않음) ──
+upstream/
+
+# ── 모델 가중치 · 캐시 (전부 프로젝트 안에 둔다, setup/_env.ps1 참고) ──
+# models/  : HuggingFace 가중치 약 25GB + 인증 토큰
+# cache/   : pip · wheels · triton · tmp
+models/
+cache/
+*.safetensors
+*.ckpt
+*.pth
+
+# ── 실행 산출물 ──────────────────────────
+runs/
+tmp/
+autotune_cache.json
+*.glb
+
+# ── 웹 vendor (로컬 동봉 JS, 용량 큼) ──
+web/vendor/*.js
+web/vendor/*.min.js
+!web/vendor/.gitkeep
+
+# ── 입력 이미지 (샘플 외 개인 이미지 제외) ──
+inputs/*
+!inputs/.gitkeep
+!inputs/README.md
+
+# ── OS ──────────────────────────────────
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixal3D 로컬 테스트</title>
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/vendor/model-viewer.min.js"></script>
+</head>
+<body>
+
+<header class="masthead">
+  <h1>Pixal3D</h1>
+  <p class="sub">이미지 한 장에서 3D 에셋 만들기</p>
+  <div class="status" id="status">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">연결 확인 중</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ① 입력 ────────────────────────────────────── -->
+  <section class="panel" id="panel-input">
+    <h2><span class="step">1</span> 이미지</h2>
+
+    <div class="drop" id="drop" tabindex="0" role="button"
+         aria-label="이미지를 끌어다 놓거나 눌러서 선택">
+      <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp" hidden>
+      <div class="drop-inner" id="drop-inner">
+        <strong>이미지를 끌어다 놓으세요</strong>
+        <span>또는 눌러서 선택 · PNG · JPG · WebP</span>
+      </div>
+      <img id="preview-src" alt="" hidden>
+    </div>
+
+    <div class="pair" id="preprocess-result" hidden>
+      <figure>
+        <img id="preview-processed" alt="배경이 제거된 이미지">
+        <figcaption>배경 제거 결과</figcaption>
+      </figure>
+      <p class="note">
+        배경 제거가 잘못됐으면 여기서 멈추고 다른 이미지를 쓰세요.
+        전처리가 틀리면 생성은 반드시 실패합니다.
+      </p>
+    </div>
+  </section>
+
+  <!-- ② 설정 ────────────────────────────────────── -->
+  <section class="panel" id="panel-params">
+    <h2><span class="step">2</span> 설정</h2>
+
+    <div class="fields">
+      <label>
+        <span>해상도</span>
+        <select id="resolution">
+          <option value="1024">1024 · 권장</option>
+          <option value="1536">1536 · 고품질, OOM 위험</option>
+        </select>
+        <small>24GB에서 1536은 메모리 부족이 날 수 있습니다.</small>
+      </label>
+
+      <label>
+        <span>시드</span>
+        <input type="number" id="seed" value="42" min="0" step="1">
+        <small>같은 값이면 같은 결과가 나옵니다.</small>
+      </label>
+
+      <label>
+        <span>샘플링 스텝</span>
+        <input type="number" id="steps" value="12" min="4" max="50" step="1">
+        <small>높이면 느려지고 디테일이 조금 늘어납니다.</small>
+      </label>
+
+      <label>
+        <span>시야각(FOV)</span>
+        <input type="number" id="fov" value="-1" step="0.1">
+        <small>-1이면 MoGe가 이미지에서 자동 추정합니다.</small>
+      </label>
+    </div>
+
+    <button id="generate" class="primary" disabled>3D 생성</button>
+  </section>
+
+  <!-- ③ 진행 ────────────────────────────────────── -->
+  <section class="panel" id="panel-progress" hidden>
+    <h2><span class="step">3</span> 생성 중</h2>
+    <p class="stage" id="stage">준비 중</p>
+    <div class="bar"><div class="fill" id="bar-fill"></div></div>
+    <p class="meta" id="progress-meta"></p>
+  </section>
+
+  <!-- ④ 결과 ────────────────────────────────────── -->
+  <section class="panel wide" id="panel-result" hidden>
+    <h2><span class="step">4</span> 결과</h2>
+    <model-viewer id="viewer" camera-controls auto-rotate shadow-intensity="1"
+                  environment-image="neutral" exposure="1"
+                  ar-status="not-presenting"></model-viewer>
+    <div class="result-meta" id="result-meta"></div>
+    <div class="actions">
+      <a id="download-full" class="button" download>원본 GLB 내려받기</a>
+      <a id="download-web" class="button ghost" download>경량 GLB 내려받기</a>
+    </div>
+  </section>
+
+  <!-- ⑤ 이력 ────────────────────────────────────── -->
+  <section class="panel wide" id="panel-history">
+    <h2>이력</h2>
+    <div class="gallery" id="gallery"><p class="empty">아직 생성한 결과가 없습니다.</p></div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
