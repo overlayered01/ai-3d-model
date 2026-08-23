@@ -243,7 +243,8 @@ D:\Work\Private\AI_3D_Model\
 │   ├── run_batch.py            CLI 배치 — 서버 API 호출 방식
 │   ├── config.py               프리셋 quality / balanced / lowvram
 │   └── shims/                  모듈명 별칭 — 리스크 R1 대응
-├── inputs/                     테스트 이미지
+├── inputs/                     개인 테스트 이미지 (추적 안 함)
+│   └── samples/                upstream 공식 샘플 (가벼운 5장만 커밋)
 ├── runs/<YYYYMMDD_HHMMSS>/     input.png · full.glb · web.glb · meta.json · log.txt
 └── docs/
     ├── TROUBLESHOOTING.md

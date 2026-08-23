@@ -7,7 +7,7 @@ UI 를 손으로 눌러보기 전에 서버 쪽이 맞는지 먼저 갈라내기
 
 사용법:
     python tools/e2e_test.py
-    python tools/e2e_test.py --image inputs/0_img.png --resolution 1024
+    python tools/e2e_test.py --image inputs/samples/1_img.png --resolution 1024
 """
 
 from __future__ import annotations
@@ -75,7 +75,8 @@ def main() -> int:
     ap.add_argument("--wait-load", type=int, default=900, help="모델 로딩 대기 한도(초)")
     args = ap.parse_args()
 
-    image = Path(args.image) if args.image else ROOT / "inputs" / "0_img.png"
+    # 기본 샘플은 저장소에 함께 들어있는 가벼운 것으로 둔다.
+    image = Path(args.image) if args.image else ROOT / "inputs" / "samples" / "1_img.png"
     if not image.exists():
         print(f"  [FAIL] 입력 이미지 없음: {image}")
         return 1

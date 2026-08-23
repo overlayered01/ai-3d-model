@@ -12,7 +12,7 @@
     powershell -File setup\06_smoke_inference.ps1
     powershell -File setup\06_smoke_inference.ps1 -Resolution 1536
     powershell -File setup\06_smoke_inference.ps1 -Standard      # low_vram 끔
-    powershell -File setup\06_smoke_inference.ps1 -Image inputs\my.png
+    powershell -File setup\06_smoke_inference.ps1 -Image inputs\samples\1_img.png
 #>
 
 param(

@@ -28,10 +28,24 @@ web/vendor/*.js
 web/vendor/*.min.js
 !web/vendor/.gitkeep
 
-# ── 입력 이미지 (샘플 외 개인 이미지 제외) ──
+# ── 입력 이미지 ──────────────────────────
+# inputs/         개인 이미지를 두는 곳. 추적하지 않는다.
+# inputs/samples/ upstream 공식 샘플 중 가벼운 것만 추적한다.
+#                 원본 고해상도(4096px, 총 59MB)는 upstream 클론에 이미 있으므로
+#                 중복 저장하지 않는다 -> upstream/Pixal3D/assets/images/
 inputs/*
 !inputs/.gitkeep
 !inputs/README.md
+!inputs/samples/
+inputs/samples/*
+!inputs/samples/.gitkeep
+
+# 가벼운 것만 (각 1MB 미만). 나머지는 upstream 클론으로 얻는다.
+!inputs/samples/1_img.png
+!inputs/samples/9_img.png
+!inputs/samples/21_img.png
+!inputs/samples/s_18_img.png
+!inputs/samples/4_img.png
 
 # ── OS ──────────────────────────────────
 Thumbs.db

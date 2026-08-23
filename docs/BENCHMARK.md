@@ -69,7 +69,7 @@ powershell -File setup\06_smoke_inference.ps1 -Resolution 1024
 
 # 웹 서버 종단 (모델 상주 상태)
 powershell -File setup\run_server.ps1        # 별도 창
-python tools\e2e_test.py --image inputs\0_img.png
+python tools\e2e_test.py --image inputs\samples\1_img.png
 ```
 
 `peak_vram_gb` 는 `torch.cuda.max_memory_allocated()` 로 생성 구간만 잰다.
