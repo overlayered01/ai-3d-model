@@ -34,8 +34,14 @@ TARGET_CAPABILITY = (8, 6)  # RTX 3090 = Ampere sm_86
 KERNEL_ALIASES = {
     "flex_gemm": ["flex_gemm", "flex_gemm_ap"],
     "cumesh": ["cumesh", "cumesh_vb"],
-    "o_voxel": ["o_voxel", "o_voxel_vb_ap"],
+    # o_voxel_vb 를 _ap 보다 앞에 둔다. _ap 판에는 postprocess 가 없다.
+    "o_voxel": ["o_voxel", "o_voxel_vb", "o_voxel_vb_ap"],
 }
+
+# import 가 되는 것만으로는 부족한 것들. 실제로 쓰는 서브모듈까지 확인한다.
+# o_voxel_vb_ap 는 import 는 멀쩡히 되지만 postprocess 가 없어서,
+# 생성이 다 끝난 뒤 GLB 추출 직전에야 AttributeError 로 죽는다.
+KERNEL_SUBMODULES = {"o_voxel": ["postprocess"]}
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
 
@@ -221,6 +227,25 @@ def check_kernels(rep: Report) -> None:
 
         found, mod = hit
         loc = getattr(mod, "__file__", "?")
+
+        # 서브모듈까지 확인 — import 성공만으로는 판정할 수 없는 것이 있다.
+        missing = []
+        for sub in KERNEL_SUBMODULES.get(canonical, []):
+            try:
+                importlib.import_module(f"{found}.{sub}")
+            except Exception:
+                if not hasattr(mod, sub):
+                    missing.append(sub)
+        if missing:
+            rep.add(
+                canonical, FAIL,
+                f"'{found}' 에 {', '.join(missing)} 서브모듈이 없다",
+                "설치된 휠 판이 잘못됐다. o_voxel 은 _ap 가 아니라 o_voxel_vb 를 써야 한다. "
+                "setup/03_cuda_wheels.ps1 을 다시 실행하고 tools/shims/install_shims.py 로 "
+                "셰임 우선순위를 다시 심어라.",
+            )
+            continue
+
         if found == canonical:
             rep.add(canonical, OK, f"{found} · {loc}")
         else:
@@ -263,6 +288,25 @@ def check_natten(rep: Report) -> None:
             "natten 버전", WARN, f"{ver} — upstream 요구는 0.21.x",
             "API 호환 여부를 확인하라.",
         )
+
+
+def check_nvdiffrast(rep: Report) -> None:
+    """UV 텍스처 베이킹에 쓴다 — 없으면 생성이 다 끝난 뒤 GLB 추출에서 죽는다.
+
+    계획서 rev.1/rev.2 는 이것을 '렌더 프리뷰용이라 생략 가능'으로 봤는데
+    틀린 판단이었다. o_voxel/postprocess.py 가 직접 import 한다.
+    """
+    try:
+        import nvdiffrast.torch as dr  # noqa: F401
+    except Exception as e:
+        rep.add(
+            "nvdiffrast", FAIL, f"import 실패: {type(e).__name__}: {e}",
+            "o_voxel.postprocess.to_glb 가 UV 베이킹에 쓴다. "
+            "setup/03_cuda_wheels.ps1 을 실행하라 (사전빌드 휠 있음).",
+        )
+        return
+    import nvdiffrast
+    rep.add("nvdiffrast", OK, getattr(nvdiffrast, "__version__", "설치됨"))
 
 
 def check_python_deps(rep: Report) -> None:
@@ -359,6 +403,7 @@ def run(gate: str) -> Report:
         check_upstream(rep)
         check_kernels(rep)
         check_natten(rep)
+        check_nvdiffrast(rep)
         check_python_deps(rep)
 
     if gate == "g1":

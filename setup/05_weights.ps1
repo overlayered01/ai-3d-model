@@ -19,7 +19,6 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_env.ps1"
 
 $Root   = Split-Path -Parent $PSScriptRoot
-$VenvPy = Join-Path $Root ".venv\Scripts\python.exe"
 
 if (-not (Test-Path $VenvPy)) { Write-Host "  [FAIL] .venv 없음. 01 부터 실행하세요." -ForegroundColor Red; exit 1 }
 

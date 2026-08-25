@@ -91,19 +91,16 @@ foreach ($k in @('HF_HOME','PIP_CACHE_DIR','TORCH_HOME')) {
 }
 
 # ── 3. venv 생성 ───────────────────────────────────────────────────────
-$VenvPath = Join-Path $Root ".venv"
-
-if (Test-Path $VenvPath) {
-    Write-Host "  [WARN] .venv 가 이미 있습니다 — 재사용합니다." -ForegroundColor Yellow
-    Write-Host "         새로 만들려면 먼저 삭제: Remove-Item -Recurse -Force '$VenvPath'"
+# $VenvDir / $VenvPy 는 _env.ps1 이 정한다 (PIXAL3D_VENV 로 바꿀 수 있다).
+if (Test-Path $VenvDir) {
+    Write-Host "  [WARN] venv 가 이미 있습니다 — 재사용합니다." -ForegroundColor Yellow
+    Write-Host "         새로 만들려면 먼저 삭제: Remove-Item -Recurse -Force '$VenvDir'"
 } else {
     Write-Host "  ...... venv 생성 중"
-    & $py312 -m venv $VenvPath
+    & $py312 -m venv $VenvDir
     if ($LASTEXITCODE -ne 0) { Write-Host "  [FAIL] venv 생성 실패" -ForegroundColor Red; exit 1 }
-    Write-Host "  [ OK ] $VenvPath" -ForegroundColor Green
 }
-
-$VenvPy = Join-Path $VenvPath "Scripts\python.exe"
+Write-Host "  [ OK ] $VenvDir" -ForegroundColor Green
 
 # ── 4. pip 최신화 ──────────────────────────────────────────────────────
 Write-Host "  ...... pip 업그레이드"

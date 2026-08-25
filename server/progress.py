@@ -39,22 +39,37 @@ _local = threading.local()
 
 # tqdm 의 desc 를 그대로 보여주면 영문 내부 용어가 노출된다.
 # 사용자가 이해할 수 있는 단계명으로 바꾼다.
-_STAGE_NAMES = {
-    "sampling": "생성 중",
-    "sparse structure": "1/3 구조 생성",
-    "shape": "2/3 형상 생성",
-    "texture": "3/3 텍스처 생성",
-    "remesh": "메시 정리",
-    "uv": "UV 펼치기",
-    "decimat": "폴리곤 감축",
-    "bake": "텍스처 굽기",
-    "export": "GLB 내보내기",
-}
+#
+# **순서가 중요하다.** 앞에서부터 부분일치로 훑어 먼저 맞는 것을 쓴다.
+# 좁은 것을 먼저 둔다 — 'Sampling attributes'(텍스처 굽기)가 맨 뒤의
+# 'sampling'(생성 중)에 먼저 걸리면, GLB 추출 도중에 화면이 '생성 중'으로
+# 되돌아간 것처럼 보인다. 실제로 그렇게 보였다.
+_STAGE_NAMES = (
+    # 3단 캐스케이드 — pixal3d.pipelines.samplers.flow_euler
+    ("sparse structure",    "1/3 구조 생성"),
+    ("hr shape",            "2/3 형상 생성 (고해상)"),
+    ("shape slat",          "2/3 형상 생성"),
+    ("texture slat",        "3/3 텍스처 생성"),
+
+    # GLB 추출 — o_voxel.postprocess
+    ("extracting glb",      "GLB 추출 준비"),
+    ("building bvh",        "공간 분할"),
+    ("cleaning mesh",       "메시 정리"),
+    ("parameterizing",      "UV 펼치기"),
+    ("sampling attributes", "텍스처 굽기"),
+    ("finalizing mesh",     "마무리"),
+
+    # 위에 안 걸린 것들
+    ("remesh",  "메시 정리"),
+    ("decimat", "폴리곤 감축"),
+    ("export",  "GLB 내보내기"),
+    ("sampling", "생성 중"),
+)
 
 
 def _humanize(desc: str) -> str:
     low = (desc or "").strip().lower()
-    for key, name in _STAGE_NAMES.items():
+    for key, name in _STAGE_NAMES:
         if key in low:
             return name
     return desc or "처리 중"

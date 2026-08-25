@@ -103,6 +103,11 @@ class Settings:
     attn_backend: str
     hf_home: str
 
+    # 재현성 우선 모드 (S6). cuDNN 알고리즘 자동선택과 TF32 를 끈다.
+    # 최선의 노력일 뿐 보장이 아니다 — 희소 복셀 커널의 atomic 누적 순서까지는
+    # 어쩌지 못한다. 자세한 측정은 docs/BENCHMARK.md 참고.
+    deterministic: bool
+
     @property
     def is_public(self) -> bool:
         """루프백이 아닌 주소에 바인딩하는가 — 인증이 없으므로 경고 대상이다."""
@@ -139,6 +144,7 @@ def load() -> Settings:
         export_webp=_bool("EXPORT_WEBP", True),
         attn_backend=os.environ["ATTN_BACKEND"],
         hf_home=os.environ.get("HF_HOME", ""),
+        deterministic=_bool("DETERMINISTIC", False),
     )
 
 

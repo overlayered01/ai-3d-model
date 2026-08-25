@@ -5,6 +5,8 @@ UI 를 손으로 눌러보기 전에 서버 쪽이 맞는지 먼저 갈라내기
 
     업로드 → /api/preprocess → /api/generate → 진행률 폴링 → 결과 확인
 
+여러 장을 돌려 성능·재현성을 재려면 tools/run_batch.py 를 쓴다.
+
 사용법:
     python tools/e2e_test.py
     python tools/e2e_test.py --image inputs/samples/1_img.png --resolution 1024
@@ -13,13 +15,14 @@ UI 를 손으로 눌러보기 전에 서버 쪽이 맞는지 먼저 갈라내기
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
-import urllib.error
 import urllib.request
-import uuid
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _api  # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -30,45 +33,9 @@ for _s in (sys.stdout, sys.stderr):
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def request(url: str, data: bytes | None = None, headers: dict | None = None,
-            method: str | None = None, timeout: int = 300) -> dict:
-    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as res:
-            return json.loads(res.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")
-        raise RuntimeError(f"HTTP {e.code}: {body[:400]}") from None
-
-
-def multipart(fields: dict[str, str], file: tuple[str, Path] | None = None) -> tuple[bytes, str]:
-    """의존성 없이 multipart/form-data 를 만든다."""
-    boundary = f"----pixal3d{uuid.uuid4().hex}"
-    parts: list[bytes] = []
-
-    for name, value in fields.items():
-        parts.append(
-            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'
-            .encode("utf-8")
-        )
-
-    if file is not None:
-        name, path = file
-        parts.append(
-            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; '
-            f'filename="{path.name}"\r\nContent-Type: application/octet-stream\r\n\r\n'
-            .encode("utf-8")
-        )
-        parts.append(path.read_bytes())
-        parts.append(b"\r\n")
-
-    parts.append(f"--{boundary}--\r\n".encode("utf-8"))
-    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="Pixal3D 웹 서버 종단 검증")
-    ap.add_argument("--base", default="http://127.0.0.1:7860")
+    ap.add_argument("--base", default=_api.DEFAULT_BASE)
     ap.add_argument("--image", default="")
     ap.add_argument("--resolution", type=int, default=1024)
     ap.add_argument("--seed", type=int, default=42)
@@ -87,81 +54,42 @@ def main() -> int:
     print("  " + "─" * 66)
 
     # ── 1. 모델 로딩 대기 ───────────────────────────────────────────
-    t0 = time.time()
-    while True:
-        try:
-            status = request(f"{args.base}/api/status", timeout=15)
-        except Exception as e:
-            print(f"  [FAIL] 서버에 연결할 수 없습니다: {e}")
-            return 1
-
-        if status.get("pipeline_error"):
-            print(f"  [FAIL] 모델 로딩 실패: {status['pipeline_error']}")
-            return 1
-        if status.get("pipeline_loaded"):
-            print(f"  [ OK ] 모델 준비 완료 ({status['load_seconds']}초)")
-            break
-
-        waited = time.time() - t0
-        if waited > args.wait_load:
-            print(f"  [FAIL] 모델 로딩이 {args.wait_load}초를 넘겼습니다.")
-            return 1
-        print(f"  ...... 모델 로딩 대기 {waited:.0f}초", end="\r")
-        time.sleep(5)
+    try:
+        status = _api.wait_ready(
+            args.base, limit=args.wait_load,
+            on_wait=lambda s: print(f"  ...... 모델 로딩 대기 {s:.0f}초", end="\r"),
+        )
+    except _api.ApiError as e:
+        print(f"  [FAIL] {e}".ljust(78))
+        return 1
+    print(f"  [ OK ] 모델 준비 완료 ({status['load_seconds']}초)".ljust(78))
 
     # ── 2. 전처리 ───────────────────────────────────────────────────
     print("  ...... 전처리 (배경 제거)")
-    body, ctype = multipart({}, file=("file", image))
     t = time.time()
-    pre = request(f"{args.base}/api/preprocess", data=body,
-                  headers={"Content-Type": ctype}, timeout=600)
+    pre = _api.preprocess(args.base, image)
     run_id = pre["run_id"]
     print(f"  [ OK ] 전처리 {time.time() - t:.1f}초 · run_id={run_id}")
 
     # ── 3. 생성 ─────────────────────────────────────────────────────
     print("  ...... 생성 요청")
-    body, ctype = multipart({
-        "run_id": run_id,
-        "seed": str(args.seed),
-        "resolution": str(args.resolution),
-        "steps": "12",
-        "fov": "-1",
-    })
-    gen = request(f"{args.base}/api/generate", data=body,
-                  headers={"Content-Type": ctype}, timeout=60)
-    job_id = gen["job_id"]
+    gen = _api.generate(args.base, run_id, seed=args.seed,
+                        resolution=args.resolution, steps=12)
 
     # ── 4. 진행률 폴링 ──────────────────────────────────────────────
     t = time.time()
-    last = ""
-    while True:
-        info = request(f"{args.base}/api/progress?job_id={job_id}", timeout=30)
-        st = info["status"]
-
-        if st in ("done", "failed", "cancelled"):
-            print(" " * 78, end="\r")
-            break
-
-        p = info.get("progress") or {}
-        stage = p.get("stage", st)
-        line = f"  ...... {stage}"
-        if p.get("total"):
-            line += f"  {p['step']}/{p['total']}"
-        line += f"  ({time.time() - t:.0f}초)"
-        if line != last:
-            print(line.ljust(78), end="\r")
-            last = line
-        time.sleep(1)
+    show = _api.StagePrinter(indent="  ...... ")
+    info = _api.poll(args.base, gen["job_id"], on_progress=show)
+    show.clear()
 
     elapsed = time.time() - t
-    if st != "done":
-        print(f"  [FAIL] 생성 {st}: {info.get('error', '')}")
+    if info["status"] != "done":
+        print(f"  [FAIL] 생성 {info['status']}: {info.get('error', '')}")
         return 1
     print(f"  [ OK ] 생성 완료 {elapsed:.0f}초")
 
     # ── 5. 결과 검증 ────────────────────────────────────────────────
-    runs = request(f"{args.base}/api/runs?limit=20", timeout=30)
-    meta = next((r for r in runs if r["run_id"] == run_id), None)
+    meta = _api.find_run(args.base, run_id)
     if meta is None:
         print("  [FAIL] 이력에서 결과를 찾지 못했습니다.")
         return 1

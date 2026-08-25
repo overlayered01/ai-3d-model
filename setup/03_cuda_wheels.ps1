@@ -7,8 +7,13 @@
 
   설치하지 않는 것:
     - flash_attn : ATTN_BACKEND=sdpa 로 대체 (upstream README 공식 허용)
-    - drtk / nvdiffrast : 서버사이드 렌더 프리뷰를 쓰지 않는다 (결정 D6)
-                          브라우저 3D 뷰어가 그 역할을 대신한다.
+    - drtk : 서버사이드 턴테이블 렌더에만 쓴다. 브라우저 뷰어가 대신한다 (결정 D6).
+
+  nvdiffrast 는 설치한다.
+    계획서 rev.1/rev.2 는 "렌더 프리뷰용이므로 생략 가능"으로 판단했으나
+    이는 틀렸다. o_voxel/postprocess.py 가 `import nvdiffrast.torch as dr` 로
+    UV 텍스처 베이킹에 쓴다. 없으면 생성은 끝나고 GLB 추출에서 죽는다.
+    (실제로 285초를 태우고 나서 실패했다. TROUBLESHOOTING 참고.)
 
   대상 스택 (전부 정확히 일치해야 한다):
     Python 3.12.10 · PyTorch 2.10.0+cu130 · CUDA 13.0 · Ampere sm_86
@@ -19,7 +24,6 @@
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_env.ps1"
 $Root   = Split-Path -Parent $PSScriptRoot
-$VenvPy = Join-Path $Root ".venv\Scripts\python.exe"
 $Cache  = Join-Path $Root "cache\wheels"
 
 if (-not (Test-Path $VenvPy)) {
@@ -50,8 +54,16 @@ $kernels = @(
        Url  = 'https://github.com/PozzettiAndrea/cuda-wheels/releases/download/flex_gemm_ap-latest/flex_gemm_ap-1.0.0%2Bcu130torch2.10-cp312-cp312-win_amd64.whl' },
     @{ Name = 'cumesh_vb'
        Url  = 'https://github.com/PozzettiAndrea/cuda-wheels/releases/download/cumesh_vb-latest/cumesh_vb-1.0%2Bcu130torch2.10-cp312-cp312-win_amd64.whl' },
+    # o_voxel 은 두 판을 모두 넣는다. 셰임(tools/shims)이 실제로 쓰는 것은
+    # o_voxel_vb 다 — _ap 판에는 postprocess 서브모듈이 아예 없어서 GLB
+    # 추출 직전에 AttributeError 로 죽는다. _ap 는 다른 경로의 대비책으로만 둔다.
+    @{ Name = 'o_voxel_vb'
+       Url  = 'https://github.com/PozzettiAndrea/cuda-wheels/releases/download/o_voxel_vb-latest/o_voxel_vb-0.0.1%2Bcu130torch2.10-cp312-cp312-win_amd64.whl' },
     @{ Name = 'o_voxel_vb_ap'
-       Url  = 'https://github.com/PozzettiAndrea/cuda-wheels/releases/download/o_voxel_vb_ap-latest/o_voxel_vb_ap-0.0.1%2Bcu130torch2.10-cp312-cp312-win_amd64.whl' }
+       Url  = 'https://github.com/PozzettiAndrea/cuda-wheels/releases/download/o_voxel_vb_ap-latest/o_voxel_vb_ap-0.0.1%2Bcu130torch2.10-cp312-cp312-win_amd64.whl' },
+    # UV 텍스처 베이킹에 필수. o_voxel.postprocess.to_glb 가 직접 import 한다.
+    @{ Name = 'nvdiffrast'
+       Url  = 'https://github.com/PozzettiAndrea/cuda-wheels/releases/download/nvdiffrast-latest/nvdiffrast-0.4.0%2Bcu130torch2.10-cp312-cp312-win_amd64.whl' }
 )
 
 foreach ($k in $kernels) {
@@ -102,7 +114,7 @@ if ($hasLib -match 'True') {
 }
 
 # ── 3. 모듈명 셰임 (리스크 R1) ─────────────────────────────────────────
-# 휠은 flex_gemm_ap / cumesh_vb / o_voxel_vb_ap 로 설치되는데
+# 휠은 flex_gemm_ap / cumesh_vb / o_voxel_vb 로 설치되는데
 # upstream 코드는 flex_gemm / cumesh / o_voxel 을 import 한다.
 Write-Host "  ...... 모듈명 셰임 확인"
 & $VenvPy (Join-Path $Root "tools\shims\install_shims.py")

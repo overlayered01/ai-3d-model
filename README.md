@@ -36,6 +36,15 @@ python setup\doctor.py --gate g1  # Python/torch/GPU 만
 python setup\doctor.py --json     # 기계 판독용
 ```
 
+설치 절차 자체가 아직 재현되는지 확인하려면 (지금 쓰는 `.venv`는 건드리지 않는다):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup\verify_clean_install.ps1
+```
+
+별도 venv를 새로 만들어 01→04를 그대로 태우고 G2 게이트로 판정한 뒤 지운다.
+가중치와 upstream 클론은 재사용하므로 25GB를 다시 받지 않는다.
+
 ### 선행 조건
 
 **Python 3.12.10 이 필요하다.** 전역에 설치된 3.14는 torch와 커뮤니티 CUDA 휠이 지원하지 않는다.
@@ -58,19 +67,27 @@ RTX 3090은 Ampere `sm_86`이고, 이 아키텍처용 Windows 사전빌드 휠�
 설치하지 않는 것:
 
 - **flash_attn** — `ATTN_BACKEND=sdpa`로 대체 (upstream README가 공식 허용)
-- **nvdiffrast / drtk** — 서버사이드 턴테이블 렌더를 쓰지 않는다. 브라우저 3D 뷰어가 그 역할을 한다
+- **drtk** — 서버사이드 턴테이블 렌더를 쓰지 않는다. 브라우저 3D 뷰어가 그 역할을 한다
+
+`nvdiffrast`는 **설치한다.** 렌더 프리뷰용이라 생략할 수 있을 것처럼 보이지만,
+`o_voxel.postprocess.to_glb`가 UV 텍스처 베이킹에 직접 쓴다. 없으면 생성이 다
+끝난 뒤 마지막 내보내기에서만 죽는다.
 
 ---
 
 ## 구조
 
 ```
-setup/       설치 스크립트 + doctor.py (환경 자가진단)
-upstream/    Pixal3D 클론 — 수정하지 않는다
-server/      FastAPI 웹 서버 (Phase 4)
-web/         브라우저 UI (Phase 5)
-tools/shims/   모듈명 셰임 — 휠이 o_voxel_vb_ap 로 설치하는데 upstream은 o_voxel 로 import
-runs/        실행 산출물 (input.png · full.glb · web.glb · meta.json · log.txt)
+setup/         설치 스크립트 + doctor.py (환경 자가진단)
+upstream/      Pixal3D 클론 — 수정하지 않는다
+server/        FastAPI 웹 서버
+web/           브라우저 UI (model-viewer 로컬 동봉)
+tools/         래퍼·검증 도구 (e2e_test · run_batch · run_inference)
+tools/shims/   모듈명 셰임 — 휠이 o_voxel_vb 로 설치하는데 upstream은 o_voxel 로 import
+inputs/samples/ upstream 공식 샘플 이미지
+runs/          실행 산출물 (input.png · full.glb · web.glb · meta.json · log.txt)
+reports/       배치 실행 보고서
+docs/          BENCHMARK.md · TROUBLESHOOTING.md
 ```
 
 `upstream/`을 직접 고치지 않는다. `server/pipeline.py`가 감싸고, 모듈명 차이는
@@ -80,28 +97,49 @@ runs/        실행 산출물 (input.png · full.glb · web.glb · meta.json · 
 
 ## 실행
 
-### CLI (게이트 G3 — 웹을 붙이기 전 파이프라인 단독 검증)
+### 웹 서버 — 평소에는 이것만 쓰면 된다
 
 ```powershell
-cd upstream\Pixal3D
-$env:ATTN_BACKEND='sdpa'
-python inference.py --image assets\images\0_img.png --output ..\..\runs\smoke.glb --low_vram --resolution 1024
+powershell -File setup\run_server.ps1
 ```
 
-### 웹 서버 (Phase 4~5, 구현 예정)
+띄운 뒤 브라우저에서 **http://127.0.0.1:7860**. 업로드 → 배경 제거 확인 →
+생성 → 3D 뷰어 → 이력 비교가 한 페이지에서 끝난다.
+
+모델 로딩에 90~170초가 걸린다. 그동안 페이지는 열리지만 생성 요청은
+'준비 중'으로 거절된다. `--workers 1`은 필수다 — 워커가 여럿이면 각각
+22GB 모델을 로드해 곧바로 OOM이 난다.
+
+### 검증·배치 (브라우저 없이)
 
 ```powershell
-python -m uvicorn server.main:app --host 127.0.0.1 --port 7860 --workers 1
+python tools\e2e_test.py                                       # 종단 1회
+python tools\run_batch.py                                      # inputs\samples 전부
+python tools\run_batch.py inputs\samples\1_img.png --repeat 3  # 재현성
+python tools\run_batch.py --resolution 1536                    # 고해상도
 ```
 
-`--workers 1`은 필수다. 워커가 여럿이면 각각 모델을 로드해 OOM이 난다.
+`run_batch.py`는 `reports/batch_<타임스탬프>.md`에 표를 남긴다.
+
+### CLI 단독 (파이프라인만 따로 볼 때)
+
+```powershell
+powershell -File setup\06_smoke_inference.ps1 -Resolution 1024
+```
+
+매 실행마다 22GB를 다시 읽으므로 웹 경로보다 70초 이상 느리다.
 
 ---
 
 ## 알아둘 것
 
-**VRAM.** 24GB 중 데스크톱이 3.4GB를 점유한다. `--low_vram` + 해상도 1024가 기본값이고,
-1536 표준 모드는 OOM을 전제로 두고 시도한다. 브라우저·Slack을 닫으면 2~3GB를 회수할 수 있다.
+**VRAM.** 24GB 중 데스크톱이 3GB 안팎을 점유한다. `low_vram` + 해상도 1024가 기본값이다.
+1536도 실측으로 통과했다 — 최대 18.7GB, 498초. 다만 여유가 2.6GB뿐이라 브라우저에서
+영상을 틀거나 다른 GPU 앱을 열면 그대로 잠식된다. 여러 건을 연달아 돌릴 때는 1024가 안전하다.
+
+**같은 seed라도 결과가 매번 조금 다르다.** 정점 수 기준 약 0.7% 편차다. 배경 제거는
+결정적이므로 원인은 CUDA 생성 경로에 있다. 결과 비교는 파일 해시 대신 정점 수와 육안으로
+한다. `DETERMINISTIC=1`로 일부 완화할 수 있으나 보장은 아니고 느려진다.
 
 **서버는 GPU를 상시 점유한다.** 웹 서버를 띄운 채로 다른 GPU 작업을 병행할 수 없다.
 

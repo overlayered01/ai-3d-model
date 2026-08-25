@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_env.ps1"
 
 $Root   = Split-Path -Parent $PSScriptRoot
-$VenvHf = Join-Path $Root ".venv\Scripts\hf.exe"
+$VenvHf = Join-Path $VenvDir "Scripts\hf.exe"
 
 if (-not (Test-Path $VenvHf)) {
     Write-Host "  [FAIL] .venv\Scripts\hf.exe 없음. setup\04_pixal3d.ps1 까지 실행하세요." -ForegroundColor Red

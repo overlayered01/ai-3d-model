@@ -51,3 +51,9 @@ inputs/samples/*
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# ── 서버 로그 ────────────────────────────
+logs/
+
+# ── 배치 보고서 (머신별 실측값) ──────────
+reports/

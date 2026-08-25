@@ -24,6 +24,15 @@
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $DataRoot = if ($env:PIXAL3D_DATA_ROOT) { $env:PIXAL3D_DATA_ROOT } else { $ProjectRoot }
 
+# ── venv 위치 ──────────────────────────────────────────────────────────
+# 기본은 프로젝트 안의 .venv. PIXAL3D_VENV 로 다른 곳을 지정할 수 있다.
+# 이 갈래가 있어야 S7(설치 절차가 클린 환경에서 재현되는가) 검증을,
+# 지금 돌아가고 있는 환경을 부수지 않고 별도 venv 에 대고 할 수 있다.
+#     $env:PIXAL3D_VENV = 'D:\...\.venv-clean'
+#     powershell -File setup\01_python_venv.ps1   # 이하 04 까지
+$VenvDir = if ($env:PIXAL3D_VENV) { $env:PIXAL3D_VENV } else { Join-Path $ProjectRoot '.venv' }
+$VenvPy  = Join-Path $VenvDir 'Scripts\python.exe'
+
 # ── 프로젝트 내부 저장 위치 ────────────────────────────────────────────
 #   models\hf      HuggingFace 가중치 + 인증 토큰 (약 25GB)
 #   models\torch   torch.hub 캐시 (NAF 업샘플러 등)

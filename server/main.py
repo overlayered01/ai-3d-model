@@ -35,6 +35,10 @@ store = Store()
 ALLOWED_SUFFIX = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 MAX_UPLOAD_MB = 40
 
+# 전처리 요청이 큐에서 순서를 기다리는 한도(초). 앞선 생성 작업 하나가
+# 끝나기를 기다릴 수 있어야 한다 — 1536 해상도는 8분 넘게 걸린다.
+PREPROCESS_WAIT = 1200
+
 
 def glb_counts(path: Path) -> dict[str, int]:
     """GLB 의 JSON 청크만 읽어 정점·삼각형 수를 센다.
@@ -181,10 +185,22 @@ async def preprocess(file: UploadFile = File(...)):
         RUNNER.preprocess(src, out)
 
     job = QUEUE.submit(job_id, _work, label=f"preprocess:{meta.run_id}")
-    # 전처리는 수 초라 그대로 기다린다. 생성과 달리 폴링할 가치가 없다.
-    await asyncio.get_running_loop().run_in_executor(None, job.wait, 180)
+
+    # 전처리 자체는 수 초다. 그래도 넉넉히 기다리는 이유는 큐가 슬롯 하나여서,
+    # 앞에 생성 작업이 돌고 있으면 그것이 끝날 때까지 순서가 오지 않기
+    # 때문이다. 생성은 해상도에 따라 10분을 넘길 수 있다. 예전의 180초는
+    # 이 대기를 '전처리 실패'로 오인해 배치 실행을 어그러뜨렸다.
+    await asyncio.get_running_loop().run_in_executor(None, job.wait, PREPROCESS_WAIT)
 
     if job.status != "done":
+        # 아직 큐에 있거나 도는 중이면 실패가 아니다. 실행을 실패로 못박지 않고
+        # 클라이언트에게 '지금은 바쁘다'고 알린다 — 나중에 다시 부르면 된다.
+        if job.status in ("queued", "running"):
+            raise HTTPException(
+                503,
+                f"앞선 작업이 아직 끝나지 않아 {PREPROCESS_WAIT}초 안에 순서가 오지 않았습니다. "
+                "잠시 뒤 다시 시도하세요.",
+            )
         meta.status = "failed"
         meta.error = job.error or "전처리에 실패했습니다."
         store.save(meta)

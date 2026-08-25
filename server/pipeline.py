@@ -196,7 +196,22 @@ class Pixal3DRunner:
 
         # ── 생성 ──
         progress.set_stage("생성 준비")
-        torch.manual_seed(seed)
+
+        # 같은 seed 로 돌려도 결과가 미세하게 달라진다 (S6 측정 결과, 정점 수
+        # 편차 약 0.7%). 전처리 결과는 비트 단위로 같으므로 원인은 생성 쪽이다.
+        #
+        # DETERMINISTIC=1 은 cuDNN 자동선택과 TF32 를 끈다. 실측해 보니
+        # **효과가 없었다** — 재현은 여전히 안 되고 소요만 70% 늘었다.
+        # 원인이 그 둘이 아니라는 뜻이다(희소 복셀 커널의 atomic 누적 순서가
+        # 유력하다). 기본값은 꺼짐이고, 이 분기는 "이미 해봤고 안 된다"를
+        # 남겨두기 위해 유지한다. 측정값은 docs/BENCHMARK.md.
+        if SETTINGS.deterministic:
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
+
+        torch.manual_seed(seed)          # CUDA 장치 seed 도 함께 설정된다
         torch.cuda.reset_peak_memory_stats()
 
         sampler = lambda gs, gr, rt: {  # noqa: E731

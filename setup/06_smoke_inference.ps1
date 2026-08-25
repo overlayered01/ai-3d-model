@@ -26,7 +26,6 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_env.ps1"
 
 $Root     = Split-Path -Parent $PSScriptRoot
-$VenvPy   = Join-Path $Root ".venv\Scripts\python.exe"
 $Upstream = Join-Path $Root "upstream\Pixal3D"
 
 if (-not (Test-Path $VenvPy)) { Write-Host "  [FAIL] .venv 없음." -ForegroundColor Red; exit 1 }
