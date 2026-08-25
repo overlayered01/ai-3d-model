@@ -386,6 +386,90 @@ nvdiffrast 자체는 설치한다. UV 텍스처 베이킹에 필요하기 때문
 
 ---
 
+### `ModuleNotFoundError: No module named 'triton'` — 두 번째 판
+
+처음 겪는 것과 원인이 다르다. 위쪽 설치 단계의 항목은 `--no-deps` 때문이었지만,
+이쪽은 **아무것도 잘못하지 않아도 일어난다.**
+
+torch 2.10.0 의 의존성 선언을 보면 이렇게 되어 있다.
+
+```
+triton==3.6.0 ; platform_system == "Linux"
+```
+
+조건이 붙어 있어 Windows 에서는 pip 이 조용히 건너뛴다. torch 설치는
+아무 경고 없이 성공하고, triton 만 없는 상태가 자연스럽게 만들어진다.
+그런데 flex_gemm 휠은 Triton 커널을 쓴다.
+
+```
+flex_gemm_ap/kernels/triton/grid_sample/config.py: import triton
+```
+
+그래서 torch 설치(G1)는 통과하는데 한참 뒤 CUDA 확장(G2)에서 깨진다.
+
+`setup/02_torch.ps1` 이 이제 `triton-windows` 를 함께 설치하고, `doctor.py` 의
+**G1** 게이트가 triton 을 검사한다. G2 가 아니라 G1 에 둔 이유는 이것이
+torch 층의 문제이고, G2 까지 끌고 가면 진단이 한 단계 늦기 때문이다.
+
+---
+
+### 클린 설치가 `03_cuda_wheels.ps1` 에서 영원히 막힌다
+
+03 이 자기가 설치하지도 않은 것을 검사하고 있었다. 두 갈래다.
+
+**1. 커널 휠이 import 되려면 파이썬 패키지들이 필요한데 없었다.**
+
+03 은 휠을 `--no-deps` 로 넣는다. 그러지 않으면 pip 이 방금 맞춰놓은 torch 를
+갈아엎기 때문이다. 대신 휠이 실제로 import 되는 데 필요한 것들을 03 이 직접
+공급해야 하는데, 그러지 않고 04 의 requirements 에 맡겨 두고 있었다.
+
+증상은 하나씩 튀어나온다 — `trimesh` 를 넣으면 `plyfile`, 그다음 `zstandard`.
+짐작으로 쫓지 말고 휠 소스의 최상위 import 를 훑어 한 번에 확정한다.
+
+```powershell
+python -c @'
+import ast, sys, pathlib, sysconfig
+sp = pathlib.Path(sysconfig.get_paths()["purelib"])
+mods = set()
+for f in (sp / "o_voxel_vb").rglob("*.py"):
+    for n in ast.walk(ast.parse(f.read_text(encoding="utf-8", errors="replace"))):
+        if isinstance(n, ast.Import):
+            mods |= {a.name.split(".")[0] for a in n.names}
+        elif isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+            mods.add(n.module.split(".")[0])
+print(sorted(m for m in mods if m not in sys.stdlib_module_names))
+'@
+```
+
+결과는 이렇다.
+
+| 휠 | 필요한 것 |
+|---|---|
+| `o_voxel_vb` | trimesh · plyfile · zstandard · easydict · opencv · pillow · tqdm |
+| `flex_gemm_ap` | triton (02 에서 설치) · filelock (torch 가 가져옴) |
+| `cumesh_vb` | tqdm |
+| `nvdiffrast` | numpy (torch 가 가져옴) |
+
+03 이 이제 이것들을 upstream `requirements.txt` 와 **같은 버전으로 고정해**
+설치하고, 그 직후 **torch 가 밀려나지 않았는지 확인한다.** 03 의 존재 이유가
+정확히 그 스택을 지키는 것이므로 확인 없이 넘어가면 안 된다.
+
+**2. 03 의 게이트가 04 의 산출물까지 검사했다.**
+
+`--gate g2` 가 `utils3d` · `moge` · `trimesh` · `fastapi` 를 확인했는데 전부
+04 가 설치하는 것들이다. 즉 **03 의 게이트는 클린 설치에서 통과할 수 없는
+게이트였다.**
+
+`doctor.py` 의 `g2` 를 03 의 책임 범위로 좁혔다 — upstream · 커널 3종 ·
+natten · nvdiffrast 까지. 파이썬 의존성은 `all` 로 옮겼고, 04 는 원래
+`--gate` 없이(`all`) 부르므로 그대로 검사된다.
+
+게이트는 그 단계가 **책임지는 것만** 검사해야 한다. 그러지 않으면 통과할 수
+없는 게이트가 생기고, 기존 환경에는 이미 다 깔려 있으니 그 사실은 클린 설치를
+해봐야만 드러난다.
+
+---
+
 ### 배치 실행이 `진행률: timed out` 으로 중간에 어그러진다
 
 증상은 두 단계로 나타난다.

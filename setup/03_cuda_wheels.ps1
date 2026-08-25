@@ -116,6 +116,41 @@ if ($hasLib -match 'True') {
 # ── 3. 모듈명 셰임 (리스크 R1) ─────────────────────────────────────────
 # 휠은 flex_gemm_ap / cumesh_vb / o_voxel_vb 로 설치되는데
 # upstream 코드는 flex_gemm / cumesh / o_voxel 을 import 한다.
+
+# 휠을 --no-deps 로 넣었으므로(torch 를 지키려고) 휠이 실제로 import 되는 데
+# 필요한 파이썬 의존성은 여기서 직접 공급해야 한다. 전부 04 의 requirements
+# 에도 들어 있지만, 03 의 셰임 검증이 그 전에 돌기 때문에 여기서 먼저 넣지
+# 않으면 클린 설치가 03 에서 막힌다.
+#
+# 목록은 짐작이 아니라 휠 소스의 최상위 import 를 훑어서 뽑았다. 이것들은
+# 서브모듈 __init__ 사슬에서 즉시 import 되므로 `import o_voxel` 자체가 안 된다.
+#
+#   o_voxel_vb  →  trimesh · plyfile · zstandard · easydict · opencv · pillow · tqdm
+#   flex_gemm   →  triton (02 에서 설치) · filelock (torch 가 가져옴)
+#   cumesh      →  tqdm
+#   nvdiffrast  →  numpy (torch 가 가져옴)
+#
+# 버전은 upstream requirements.txt 와 동일하게 고정한다. 풀어두면 최신판이
+# 들어와 04 가 다시 내려받아 갈아끼운다. torch/torchvision 은 건드리지 않는다.
+Write-Host "  ...... 커널 휠의 파이썬 의존성"
+& $VenvPy -m pip install --quiet `
+    "trimesh==4.10.1" "plyfile==1.1.3" "zstandard==0.25.0" `
+    "easydict==1.13" "opencv-python-headless==4.12.0.88" `
+    "pillow==12.0.0" "tqdm==4.67.1"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  [FAIL] 커널 휠 의존성 설치 실패." -ForegroundColor Red
+    exit 1
+}
+
+# torch 가 밀려나지 않았는지 확인 — 위 설치가 무언가를 끌어와 갈아끼웠다면
+# 여기서 잡는다. 이후 단계 전체가 이 버전에 묶여 있다.
+$torchAfter = & $VenvPy -c "import torch; print(torch.__version__)" 2>&1
+if ($torchAfter -notmatch '^2\.10\.0\+cu130') {
+    Write-Host "  [FAIL] torch 가 $torchAfter 로 바뀌었습니다. 커널 휠이 전부 깨집니다." -ForegroundColor Red
+    exit 1
+}
+Write-Host "  [ OK ] torch $torchAfter 유지" -ForegroundColor Green
+
 Write-Host "  ...... 모듈명 셰임 확인"
 & $VenvPy (Join-Path $Root "tools\shims\install_shims.py")
 

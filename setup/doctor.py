@@ -422,11 +422,17 @@ def run(gate: str) -> Report:
     check_triton(rep)
     check_gpu(rep, torch)
 
+    # G2 는 03_cuda_wheels.ps1 의 책임 범위다 — CUDA 확장까지.
     if gate in ("all", "g2"):
         check_upstream(rep)
         check_kernels(rep)
         check_natten(rep)
         check_nvdiffrast(rep)
+
+    # 파이썬 의존성은 04_pixal3d.ps1 이 설치한다. G2 에 넣으면 03 이
+    # 자기가 설치하지도 않은 것을 검사하다 떨어져, 클린 설치가 03 에서
+    # 영원히 막힌다. 04 는 --gate 없이(=all) 부르므로 여기서 검사된다.
+    if gate == "all":
         check_python_deps(rep)
 
     if gate == "g1":

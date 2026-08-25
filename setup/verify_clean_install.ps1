@@ -50,6 +50,11 @@ if (Test-Path $target) {
 # 이 프로세스 안에서만 유효하다. 자식 스크립트가 _env.ps1 을 통해 읽는다.
 $env:PIXAL3D_VENV = $target
 
+# 마지막 G2 판정을 이 프로세스에서 직접 돌리므로, 여기서도 저장 위치를 잡아야
+# 한다. 자식 스크립트들은 각자 dot-source 하니 문제가 없지만, 이 프로세스가
+# 그냥 두면 doctor 가 "HF_HOME 미설정" 을 허위로 경고한다.
+. "$PSScriptRoot\_env.ps1"
+
 $steps = @(
     @{ N = '01'; File = '01_python_venv.ps1' },
     @{ N = '02'; File = '02_torch.ps1' },
