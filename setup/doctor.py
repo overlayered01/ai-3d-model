@@ -158,6 +158,28 @@ def check_torch(rep: Report) -> "object | None":
     return torch
 
 
+def check_triton(rep: Report) -> None:
+    """flex_gemm 휠이 Triton 커널을 쓴다 — 없으면 G2 에서 import 가 깨진다.
+
+    G1 에 두는 이유가 있다. torch 2.10.0 의 triton 핀에는
+    `; platform_system == "Linux"` 조건이 붙어 있어 Windows 에서는 pip 이
+    조용히 건너뛴다. 그래서 torch 설치는 성공했는데 triton 만 없는 상태가
+    자연스럽게 만들어지고, 그 사실은 한참 뒤 G2 에서야 드러난다.
+    """
+    try:
+        import triton
+    except Exception as e:
+        rep.add(
+            "triton", FAIL, f"import 실패: {type(e).__name__}: {e}",
+            "공식 triton 에는 Windows 휠이 없다. triton-windows 를 설치하라: "
+            "pip install triton-windows==3.6.0.post26 (setup/02_torch.ps1). "
+            "torch 가 요구하는 앞 세 자리에 맞춘다.",
+            gate="g1",
+        )
+        return
+    rep.add("triton", OK, getattr(triton, "__version__", "설치됨"), gate="g1")
+
+
 def check_gpu(rep: Report, torch) -> None:
     if torch is None:
         rep.add("CUDA 가용성", FAIL, "torch 없음", "torch 설치 후 재실행", gate="g1")
@@ -397,6 +419,7 @@ def run(gate: str) -> Report:
     check_cache_redirect(rep)
     check_disk(rep)
     torch = check_torch(rep)
+    check_triton(rep)
     check_gpu(rep, torch)
 
     if gate in ("all", "g2"):

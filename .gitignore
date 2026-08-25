@@ -1,5 +1,7 @@
 # ── 환경 ────────────────────────────────
 .venv/
+# setup/verify_clean_install.ps1 이 만드는 검증용 venv (S7)
+.venv-clean/
 .env
 __pycache__/
 *.py[cod]
